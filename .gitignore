@@ -4,4 +4,4 @@
 out
 gen
 
-/datasets/
+/datasets/*.pkl
