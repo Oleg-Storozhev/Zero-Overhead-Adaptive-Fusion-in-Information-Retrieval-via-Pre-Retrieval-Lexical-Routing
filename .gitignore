@@ -4,4 +4,6 @@
 out
 gen
 
-/datasets/*.pkl
+/cached_data/
+/datasets/
+/models/
