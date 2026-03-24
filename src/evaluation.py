@@ -1,0 +1,214 @@
+import os
+import torch
+import shap
+import random
+import numpy as np
+import matplotlib.pyplot as plt
+import torch.nn as nn
+
+from beir.retrieval.evaluation import EvaluateRetrieval
+from typing import List, Dict, Any
+
+from src.features import CalculateFeatures
+
+
+class SHAPWrapper(nn.Module):
+    """Wrapper to ensure the model outputs a 2D tensor for SHAP compatibility."""
+    def __init__(self, original_model):
+        super().__init__()
+        self.original_model = original_model
+
+    def forward(self, x):
+        out = self.original_model(x)
+        if len(out.shape) == 1:
+            out = out.unsqueeze(1)
+        return out
+
+
+def evaluate_static(retrieval_data: Dict[str, Any], datasets_list: List[str], output_dir: str = "results/plots"):
+    """Calculates static Oracle baselines by grid-searching alpha and plots the results."""
+    evaluator = EvaluateRetrieval()
+    alphas = np.round(np.arange(0.0, 1.05, 0.05), 2)
+
+    results_ndcg = {ds: [] for ds in datasets_list}
+    results_mrr = {ds: [] for ds in datasets_list}
+
+    for ds in datasets_list:
+        data = retrieval_data[ds]
+        dense_norm = data["dense_norm"]
+        sparse_norm = data["sparse_norm"]
+        qrels = data["qrels"]
+
+        print(f"[{ds.upper()}] Evaluating static alphas...")
+        for alpha in alphas:
+            hybrid_results = {}
+            all_qids = set(dense_norm.keys()) | set(sparse_norm.keys())
+
+            for qid in all_qids:
+                hybrid_results[qid] = {}
+                candidate_docs = set(dense_norm.get(qid, {}).keys()) | set(sparse_norm.get(qid, {}).keys())
+                for did in candidate_docs:
+                    s_d = dense_norm.get(qid, {}).get(did, 0.0)
+                    s_s = sparse_norm.get(qid, {}).get(did, 0.0)
+                    hybrid_results[qid][did] = float(alpha * s_d + (1.0 - alpha) * s_s)
+
+            ndcg_dict, _, _, _ = evaluator.evaluate(qrels, hybrid_results, [10])
+            mrr_dict = evaluator.evaluate_custom(qrels, hybrid_results, [10], metric="mrr")
+
+            results_ndcg[ds].append(ndcg_dict["NDCG@10"])
+            mrr_key = list(mrr_dict.keys())[0]
+            results_mrr[ds].append(mrr_dict[mrr_key])
+
+    # Plotting
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12))
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', "#4D8A8C", "#38B00E"]
+
+    for i, ds in enumerate(datasets_list):
+        # NDCG Plot
+        ax1.plot(alphas, results_ndcg[ds], label=ds.upper(), color=colors[i], marker='o', markersize=4)
+        max_idx = np.argmax(results_ndcg[ds])
+        ax1.scatter(alphas[max_idx], results_ndcg[ds][max_idx], color=colors[i], s=100, marker='*')
+
+        # MRR Plot
+        ax2.plot(alphas, results_mrr[ds], label=ds.upper(), color=colors[i], marker='o', markersize=4)
+        max_idx_mrr = np.argmax(results_mrr[ds])
+        ax2.scatter(alphas[max_idx_mrr], results_mrr[ds][max_idx_mrr], color=colors[i], s=100, marker='*')
+
+    ax1.set_title("NDCG@10 by Dense Weight ($\\alpha$)", fontsize=14)
+    ax1.set_xlabel("$\\alpha$ (0 = Pure BM25, 1 = Pure Dense)", fontsize=12)
+    ax1.set_ylabel("NDCG@10", fontsize=12)
+    ax1.set_xticks(alphas)
+    ax1.grid(True, linestyle='--', alpha=0.6)
+    ax1.legend()
+
+    ax2.set_title("MRR@10 by Dense Weight ($\\alpha$)", fontsize=14)
+    ax2.set_xlabel("$\\alpha$ (0 = Pure BM25, 1 = Pure Dense)", fontsize=12)
+    ax2.set_ylabel("MRR@10", fontsize=12)
+    ax2.set_xticks(alphas)
+    ax2.grid(True, linestyle='--', alpha=0.6)
+    ax2.legend()
+
+    plt.tight_layout()
+    os.makedirs(output_dir, exist_ok=True)
+    save_path = os.path.join(output_dir, "static_oracle_benchmark.pdf")
+    plt.savefig(save_path, dpi=300, format='pdf')
+    print(f"\nSaved static evaluation plot to {save_path}")
+    # plt.show() # Uncomment if running interactively
+
+
+def evaluate_dynamic_router(model, retrieval_data: Dict[str, Any], datasets: List[str], device: str = 'cpu'):
+    """Evaluates the neural router on zero-shot test datasets."""
+    model.to(device)
+    model.eval()
+    evaluator = EvaluateRetrieval()
+    dynamic_results = {}
+
+    with torch.no_grad():
+        for ds in datasets:
+            print(f"\n[TESTING] {ds.upper()}...")
+            data = retrieval_data[ds]
+            queries = data["queries"]
+            qrels = data["qrels"]
+            dense_norm = data["dense_norm"]
+            sparse_norm = data["sparse_norm"]
+            idf_dict = data["idf_dict"]
+            vocab_set = data["vocab_set"]
+
+            hybrid_results = {}
+            predicted_alphas = []
+
+            for qid, q_text in queries.items():
+                if qid not in qrels:
+                    continue
+
+                # Dynamically extract features using the dataset's vocabulary
+                x_q = CalculateFeatures.extract_features(q_text, idf_dict, vocab_set)
+                x_q_tensor = torch.tensor(x_q, dtype=torch.float32).unsqueeze(0).to(device)
+
+                alpha = model(x_q_tensor).item()
+                predicted_alphas.append(alpha)
+
+                candidate_docs = set(dense_norm.get(qid, {}).keys()) | set(sparse_norm.get(qid, {}).keys())
+                hybrid_results[qid] = {}
+
+                for did in candidate_docs:
+                    s_d = dense_norm.get(qid, {}).get(did, 0.0)
+                    s_s = sparse_norm.get(qid, {}).get(did, 0.0)
+                    hybrid_results[qid][did] = alpha * s_d + (1.0 - alpha) * s_s
+
+            ndcg_dict, _, _, _ = evaluator.evaluate(qrels, hybrid_results, [10])
+            mrr_dict = evaluator.evaluate_custom(qrels, hybrid_results, [10], metric="mrr")
+            mrr_key = list(mrr_dict.keys())[0]
+
+            mean_alpha = np.mean(predicted_alphas)
+            std_alpha = np.std(predicted_alphas)
+
+            dynamic_results[ds] = {
+                "NDCG@10": ndcg_dict["NDCG@10"],
+                "MRR@10": mrr_dict[mrr_key],
+                "mean_alpha": mean_alpha,
+                "std_alpha": std_alpha
+            }
+
+            print(f"Dynamic NDCG@10: {ndcg_dict['NDCG@10']:.4f}")
+            print(f"Dynamic MRR@10:  {mrr_dict[mrr_key]:.4f}")
+            print(f"Alpha stats:     mean = {mean_alpha:.4f}, std = {std_alpha:.4f}")
+
+    return dynamic_results
+
+
+def get_plot_shap(model, retrieval_data: Dict[str, Any], datasets: List[str], output_dir: str = "results/plots"):
+    """Generates and saves a SHAP summary plot for model interpretability."""
+    print("\nExtracting features for SHAP analysis...")
+    model.cpu()
+    model.eval()
+    shap_model = SHAPWrapper(model)
+
+    all_features = []
+    # Sample queries across datasets to build a representative feature distribution
+    for ds in datasets:
+        data = retrieval_data[ds]
+        queries = data["queries"]
+        idf_dict = data["idf_dict"]
+        vocab_set = data["vocab_set"]
+
+        for qid, q_text in queries.items():
+            feat = CalculateFeatures.extract_features(q_text, idf_dict, vocab_set)
+            all_features.append(feat)
+
+    # Randomly sample 2000 items to keep SHAP fast
+    sample_size = min(2000, len(all_features))
+    sampled_features = random.sample(all_features, sample_size)
+
+    X_tensor = torch.tensor(sampled_features, dtype=torch.float32)
+
+    background = X_tensor[:100]
+    test_samples = X_tensor[100:]
+
+    print("Running DeepExplainer (this might take a few seconds)...")
+    explainer = shap.DeepExplainer(shap_model, background)
+    shap_values = explainer.shap_values(test_samples, check_additivity=False)
+
+    feature_names = [
+        "q_len", "mean_idf", "max_idf", "min_idf", "std_idf",
+        "rare_ratio", "oov_ratio", "idf_skewness", "query_entropy", "digit_ratio",
+        "upper_ratio", "punct_ratio", "stopword_ratio", "noun_ratio",
+        "verb_ratio", "adj_ratio", "avg_word_len"
+    ]
+
+    plt.figure(figsize=(12, 8))
+    if isinstance(shap_values, list):
+        shap_values = shap_values[0]
+
+    shap_vals_2d = np.array(shap_values).reshape(-1, 17)
+    test_samples_2d = test_samples.numpy().reshape(-1, 17)
+
+    shap.summary_plot(shap_vals_2d, test_samples_2d, feature_names=feature_names, show=False)
+
+    os.makedirs(output_dir, exist_ok=True)
+    # Имя файла зависит от типа переданной модели
+    model_name = model.__class__.__name__.lower()
+    save_path = os.path.join(output_dir, f"shap_summary_{model_name}.png")
+    plt.savefig(save_path, bbox_inches='tight', dpi=300)
+    print(f"Saved SHAP summary plot to {save_path}")
+    plt.close()
