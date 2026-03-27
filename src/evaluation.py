@@ -1,5 +1,3 @@
-import os
-from pathlib import Path
 import torch
 import shap
 import random
@@ -28,12 +26,15 @@ class SHAPWrapper(nn.Module):
 
 
 def evaluate_static(retrieval_data: Dict[str, Any], datasets_list: List[str], output_dir: str = "results/plots"):
-    """Calculates static Oracle baselines by grid-searching alpha and plots the results."""
+    """Calculates static Oracle baselines by grid-searching alpha and plots/saves all metrics."""
     evaluator = EvaluateRetrieval()
     alphas = np.round(np.arange(0.0, 1.05, 0.05), 2)
+    k_values = [10, 100]
 
-    results_ndcg = {ds: [] for ds in datasets_list}
-    results_mrr = {ds: [] for ds in datasets_list}
+    results_ndcg_10 = {ds: [] for ds in datasets_list}
+    results_mrr_10 = {ds: [] for ds in datasets_list}
+
+    detailed_metrics = {ds: [] for ds in datasets_list}
 
     for ds in datasets_list:
         data = retrieval_data[ds]
@@ -54,27 +55,37 @@ def evaluate_static(retrieval_data: Dict[str, Any], datasets_list: List[str], ou
                     s_s = sparse_norm.get(qid, {}).get(did, 0.0)
                     hybrid_results[qid][did] = float(alpha * s_d + (1.0 - alpha) * s_s)
 
-            ndcg_dict, _, _, _ = evaluator.evaluate(qrels, hybrid_results, [10])
-            mrr_dict = evaluator.evaluate_custom(qrels, hybrid_results, [10], metric="mrr")
+            ndcg_dict, map_dict, recall_dict, precision_dict = evaluator.evaluate(qrels, hybrid_results, k_values)
+            mrr_dict = evaluator.evaluate_custom(qrels, hybrid_results, k_values, metric="mrr")
 
-            results_ndcg[ds].append(ndcg_dict["NDCG@10"])
-            mrr_key = list(mrr_dict.keys())[0]
-            results_mrr[ds].append(mrr_dict[mrr_key])
+            # Сохраняем @10 для построения графиков
+            results_ndcg_10[ds].append(ndcg_dict["NDCG@10"])
+            results_mrr_10[ds].append(mrr_dict["MRR@10"])
+
+            # Сохраняем абсолютно все метрики для этой альфы
+            detailed_metrics[ds].append({
+                "alpha": float(alpha),
+                "NDCG": ndcg_dict,
+                "MAP": map_dict,
+                "Recall": recall_dict,
+                "Precision": precision_dict,
+                "MRR": mrr_dict
+            })
 
     # Plotting
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12))
     colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', "#4D8A8C", "#38B00E"]
 
     for i, ds in enumerate(datasets_list):
-        # NDCG Plot
-        ax1.plot(alphas, results_ndcg[ds], label=ds.upper(), color=colors[i], marker='o', markersize=4)
-        max_idx = np.argmax(results_ndcg[ds])
-        ax1.scatter(alphas[max_idx], results_ndcg[ds][max_idx], color=colors[i], s=100, marker='*')
+        # NDCG@10 Plot
+        ax1.plot(alphas, results_ndcg_10[ds], label=ds.upper(), color=colors[i], marker='o', markersize=4)
+        max_idx = np.argmax(results_ndcg_10[ds])
+        ax1.scatter(alphas[max_idx], results_ndcg_10[ds][max_idx], color=colors[i], s=100, marker='*')
 
-        # MRR Plot
-        ax2.plot(alphas, results_mrr[ds], label=ds.upper(), color=colors[i], marker='o', markersize=4)
-        max_idx_mrr = np.argmax(results_mrr[ds])
-        ax2.scatter(alphas[max_idx_mrr], results_mrr[ds][max_idx_mrr], color=colors[i], s=100, marker='*')
+        # MRR@10 Plot
+        ax2.plot(alphas, results_mrr_10[ds], label=ds.upper(), color=colors[i], marker='o', markersize=4)
+        max_idx_mrr = np.argmax(results_mrr_10[ds])
+        ax2.scatter(alphas[max_idx_mrr], results_mrr_10[ds][max_idx_mrr], color=colors[i], s=100, marker='*')
 
     ax1.set_title("NDCG@10 by Dense Weight ($\\alpha$)", fontsize=14)
     ax1.set_xlabel("$\\alpha$ (0 = Pure BM25, 1 = Pure Dense)", fontsize=12)
@@ -95,20 +106,19 @@ def evaluate_static(retrieval_data: Dict[str, Any], datasets_list: List[str], ou
     save_path = output_dir / "static_oracle_benchmark.pdf"
     plt.savefig(save_path, dpi=300, format='pdf')
     print(f"\nSaved static evaluation plot to {save_path}")
-    # plt.show() # Uncomment if running interactively
 
+    # Формируем структуру данных для JSON
     best_by_dataset = {}
     for ds in datasets_list:
-        best_ndcg_idx = int(np.argmax(results_ndcg[ds]))
-        best_mrr_idx = int(np.argmax(results_mrr[ds]))
+        best_ndcg_idx = int(np.argmax(results_ndcg_10[ds]))
+        best_mrr_idx = int(np.argmax(results_mrr_10[ds]))
+
         best_by_dataset[ds] = {
             "best_alpha_ndcg": float(alphas[best_ndcg_idx]),
-            "best_ndcg_at_10": float(results_ndcg[ds][best_ndcg_idx]),
+            "best_ndcg_at_10": float(results_ndcg_10[ds][best_ndcg_idx]),
             "best_alpha_mrr": float(alphas[best_mrr_idx]),
-            "best_mrr_at_10": float(results_mrr[ds][best_mrr_idx]),
-            "alpha_grid": [float(alpha) for alpha in alphas],
-            "ndcg_curve": [float(value) for value in results_ndcg[ds]],
-            "mrr_curve": [float(value) for value in results_mrr[ds]],
+            "best_mrr_at_10": float(results_mrr_10[ds][best_mrr_idx]),
+            "detailed_metrics": detailed_metrics[ds] # Все данные для всех альф
         }
 
     return {
@@ -118,11 +128,12 @@ def evaluate_static(retrieval_data: Dict[str, Any], datasets_list: List[str], ou
 
 
 def evaluate_dynamic_router(model, retrieval_data: Dict[str, Any], datasets: List[str], device: str = 'cpu'):
-    """Evaluates the neural router on zero-shot test datasets."""
+    """Evaluates the neural router on zero-shot test datasets using multiple k-cutoffs."""
     model.to(device)
     model.eval()
     evaluator = EvaluateRetrieval()
     dynamic_results = {}
+    k_values = [10, 100]
 
     with torch.no_grad():
         for ds in datasets:
@@ -142,7 +153,6 @@ def evaluate_dynamic_router(model, retrieval_data: Dict[str, Any], datasets: Lis
                 if qid not in qrels:
                     continue
 
-                # Dynamically extract features using the dataset's vocabulary
                 x_q = CalculateFeatures.extract_features(q_text, idf_dict, vocab_set)
                 x_q_tensor = torch.tensor(x_q, dtype=torch.float32).unsqueeze(0).to(device)
 
@@ -157,23 +167,26 @@ def evaluate_dynamic_router(model, retrieval_data: Dict[str, Any], datasets: Lis
                     s_s = sparse_norm.get(qid, {}).get(did, 0.0)
                     hybrid_results[qid][did] = alpha * s_d + (1.0 - alpha) * s_s
 
-            ndcg_dict, _, _, _ = evaluator.evaluate(qrels, hybrid_results, [10])
-            mrr_dict = evaluator.evaluate_custom(qrels, hybrid_results, [10], metric="mrr")
-            mrr_key = list(mrr_dict.keys())[0]
+            ndcg, map_metric, recall, precision = evaluator.evaluate(qrels, hybrid_results, k_values)
+            mrr = evaluator.evaluate_custom(qrels, hybrid_results, k_values, metric="mrr")
 
             mean_alpha = np.mean(predicted_alphas)
             std_alpha = np.std(predicted_alphas)
 
             dynamic_results[ds] = {
-                "NDCG@10": ndcg_dict["NDCG@10"],
-                "MRR@10": mrr_dict[mrr_key],
-                "mean_alpha": mean_alpha,
-                "std_alpha": std_alpha
+                "NDCG": ndcg,
+                "MAP": map_metric,
+                "Recall": recall,
+                "Precision": precision,
+                "MRR": mrr,
+                "mean_alpha": float(mean_alpha),
+                "std_alpha": float(std_alpha)
             }
 
-            print(f"Dynamic NDCG@10: {ndcg_dict['NDCG@10']:.4f}")
-            print(f"Dynamic MRR@10:  {mrr_dict[mrr_key]:.4f}")
-            print(f"Alpha stats:     mean = {mean_alpha:.4f}, std = {std_alpha:.4f}")
+            print(f"NDCG@10:    {ndcg['NDCG@10']:.4f}  |  NDCG@100: {ndcg['NDCG@100']:.4f}")
+            print(f"MRR@10:     {mrr['MRR@10']:.4f}  |  MRR@100:  {mrr['MRR@100']:.4f}")
+            print(f"Recall@100: {recall['Recall@100']:.4f}")
+            print(f"Alpha stats: mean = {mean_alpha:.4f}, std = {std_alpha:.4f}")
 
     return dynamic_results
 
@@ -186,7 +199,6 @@ def get_plot_shap(model, retrieval_data: Dict[str, Any], datasets: List[str], ou
     shap_model = SHAPWrapper(model)
 
     all_features = []
-    # Sample queries across datasets to build a representative feature distribution
     for ds in datasets:
         data = retrieval_data[ds]
         queries = data["queries"]
@@ -197,7 +209,6 @@ def get_plot_shap(model, retrieval_data: Dict[str, Any], datasets: List[str], ou
             feat = CalculateFeatures.extract_features(q_text, idf_dict, vocab_set)
             all_features.append(feat)
 
-    # Randomly sample 2000 items to keep SHAP fast
     sample_size = min(2000, len(all_features))
     sampled_features = random.sample(all_features, sample_size)
 
@@ -227,7 +238,6 @@ def get_plot_shap(model, retrieval_data: Dict[str, Any], datasets: List[str], ou
     shap.summary_plot(shap_vals_2d, test_samples_2d, feature_names=feature_names, show=False)
 
     output_dir = ensure_dir(output_dir)
-    # Имя файла зависит от типа переданной модели
     model_name = model.__class__.__name__.lower()
     save_path = output_dir / f"shap_summary_{model_name}.png"
     plt.savefig(save_path, bbox_inches='tight', dpi=300)
@@ -237,10 +247,10 @@ def get_plot_shap(model, retrieval_data: Dict[str, Any], datasets: List[str], ou
 
 
 def save_evaluation_summary(
-    output_dir: str,
-    static_summary: Dict[str, Any],
-    dynamic_summaries: Dict[str, Any],
-    shap_plots: Dict[str, str],
+        output_dir: str,
+        static_summary: Dict[str, Any],
+        dynamic_summaries: Dict[str, Any],
+        shap_plots: Dict[str, str],
 ) -> str:
     output_dir_path = ensure_dir(output_dir)
     summary_path = output_dir_path / "evaluation_summary.json"
