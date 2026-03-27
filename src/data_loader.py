@@ -159,14 +159,14 @@ class RunDatasets:
         print("\nTest benchmark completed!")
         return results_ndcg, results_mrr, alphas
 
-    def run_test_datasets(self, datasets: list, split="test"):
+    def run_test_datasets(self, datasets: list, split="test", sample_queries: int = 1000):
         """Extracts artifacts, saves them for dynamic inference, and calculates static baselines."""
         alphas = np.round(np.arange(0.0, 1.05, 0.05), 2)
         results_ndcg = {ds: [] for ds in datasets}
         results_mrr = {ds: [] for ds in datasets}
 
         for ds in datasets:
-            data = self._process_dataset(ds, split, sample_queries=1000)
+            data = self._process_dataset(ds, split, sample_queries=sample_queries)
             self.test_retrieval_data[ds] = data  # Save for PyTorch
 
             dense_norm = data["dense_norm"]

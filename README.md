@@ -98,9 +98,18 @@ This step downloads BEIR datasets, runs dense and sparse retrieval, normalizes s
 python scripts/01_prepare_data.py
 ```
 
+Example with explicit seed and cache directory:
+
+```bash
+python scripts/01_prepare_data.py \
+  --seed 42 \
+  --cache-dir cached_data
+```
+
 Expected outputs:
 
 - cached retrieval artifacts for train and test splits
+- `cached_data/data_preparation_manifest.json`
 - BEIR datasets stored under `datasets/`
 
 ### 2. Train Query Routers
@@ -111,10 +120,21 @@ This step loads cached training data, builds training triplets, extracts the 17-
 python scripts/02_train_models.py
 ```
 
+Example with explicit hyperparameters:
+
+```bash
+python scripts/02_train_models.py \
+  --cache-path cached_data/train_retrieval_data_cached_v1.pkl \
+  --batch-size 64 \
+  --epochs 62 \
+  --seed 42
+```
+
 Expected outputs:
 
 - `models/alpharouter_advanced_v1.pth`
 - `models/alpharouter_mlp_v1.pth`
+- `results/training_summary.json`
 
 ### 3. Evaluate Zero-Shot Routing
 
@@ -124,10 +144,21 @@ This step loads the trained models and cached test data, runs zero-shot inferenc
 python scripts/03_evaluate.py
 ```
 
+Example with explicit artifact locations:
+
+```bash
+python scripts/03_evaluate.py \
+  --cache-path cached_data/test_retrieval_data_cached_v1.pkl \
+  --models-dir models \
+  --output-dir results/plots \
+  --seed 42
+```
+
 Expected outputs:
 
 - static oracle benchmark plots in `results/plots/`
 - SHAP feature-attribution plots in `results/plots/`
+- `results/plots/evaluation_summary.json`
 - printed NDCG@10 and MRR@10 metrics for static and dynamic settings
 
 ## Repository Structure
@@ -207,6 +238,7 @@ This analysis is intended to quantify which lexical cues most strongly influence
 ## Reproducibility Notes
 
 - Run all commands from the repository root.
-- Ensure the SpaCy English model `en_core_web_sm` is installed before importing `src/features.py`.
+- Ensure the SpaCy English model `en_core_web_sm` is installed before running any feature extraction step.
 - Data downloads and model downloads occur lazily during the first execution of the pipeline.
+- Use the `--seed` flag across data preparation, training, and evaluation to make sampling behavior reproducible.
 - The executable script directory is currently named `scripts/` in the repository and the commands above reflect the repository as-is.

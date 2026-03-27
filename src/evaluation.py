@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import torch
 import shap
 import random
@@ -10,6 +11,7 @@ from beir.retrieval.evaluation import EvaluateRetrieval
 from typing import List, Dict, Any
 
 from src.features import CalculateFeatures
+from src.utils import ensure_dir, save_json
 
 
 class SHAPWrapper(nn.Module):
@@ -89,11 +91,30 @@ def evaluate_static(retrieval_data: Dict[str, Any], datasets_list: List[str], ou
     ax2.legend()
 
     plt.tight_layout()
-    os.makedirs(output_dir, exist_ok=True)
-    save_path = os.path.join(output_dir, "static_oracle_benchmark.pdf")
+    output_dir = ensure_dir(output_dir)
+    save_path = output_dir / "static_oracle_benchmark.pdf"
     plt.savefig(save_path, dpi=300, format='pdf')
     print(f"\nSaved static evaluation plot to {save_path}")
     # plt.show() # Uncomment if running interactively
+
+    best_by_dataset = {}
+    for ds in datasets_list:
+        best_ndcg_idx = int(np.argmax(results_ndcg[ds]))
+        best_mrr_idx = int(np.argmax(results_mrr[ds]))
+        best_by_dataset[ds] = {
+            "best_alpha_ndcg": float(alphas[best_ndcg_idx]),
+            "best_ndcg_at_10": float(results_ndcg[ds][best_ndcg_idx]),
+            "best_alpha_mrr": float(alphas[best_mrr_idx]),
+            "best_mrr_at_10": float(results_mrr[ds][best_mrr_idx]),
+            "alpha_grid": [float(alpha) for alpha in alphas],
+            "ndcg_curve": [float(value) for value in results_ndcg[ds]],
+            "mrr_curve": [float(value) for value in results_mrr[ds]],
+        }
+
+    return {
+        "plot_path": str(save_path),
+        "best_by_dataset": best_by_dataset,
+    }
 
 
 def evaluate_dynamic_router(model, retrieval_data: Dict[str, Any], datasets: List[str], device: str = 'cpu'):
@@ -205,10 +226,28 @@ def get_plot_shap(model, retrieval_data: Dict[str, Any], datasets: List[str], ou
 
     shap.summary_plot(shap_vals_2d, test_samples_2d, feature_names=feature_names, show=False)
 
-    os.makedirs(output_dir, exist_ok=True)
+    output_dir = ensure_dir(output_dir)
     # Имя файла зависит от типа переданной модели
     model_name = model.__class__.__name__.lower()
-    save_path = os.path.join(output_dir, f"shap_summary_{model_name}.png")
+    save_path = output_dir / f"shap_summary_{model_name}.png"
     plt.savefig(save_path, bbox_inches='tight', dpi=300)
     print(f"Saved SHAP summary plot to {save_path}")
     plt.close()
+    return str(save_path)
+
+
+def save_evaluation_summary(
+    output_dir: str,
+    static_summary: Dict[str, Any],
+    dynamic_summaries: Dict[str, Any],
+    shap_plots: Dict[str, str],
+) -> str:
+    output_dir_path = ensure_dir(output_dir)
+    summary_path = output_dir_path / "evaluation_summary.json"
+    payload = {
+        "static_oracle": static_summary,
+        "dynamic_routers": dynamic_summaries,
+        "shap_plots": shap_plots,
+    }
+    save_json(payload, summary_path)
+    return str(summary_path)

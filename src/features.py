@@ -8,7 +8,19 @@ from scipy.stats import skew
 
 
 class CalculateFeatures:
-    nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
+    _nlp = None
+
+    @classmethod
+    def get_nlp(cls):
+        if cls._nlp is None:
+            try:
+                cls._nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
+            except OSError as exc:
+                raise RuntimeError(
+                    "SpaCy model 'en_core_web_sm' is required. Install it with "
+                    "'python -m spacy download en_core_web_sm' before running feature extraction."
+                ) from exc
+        return cls._nlp
 
     @staticmethod
     def get_lexical_features(idf_dict: dict, vocab_set: set, tokens: list, q_len: int) -> list:
@@ -66,7 +78,7 @@ class CalculateFeatures:
     def get_nlp_features(query_text: str, tokens: list) -> list:
         """Calculates NLP-based features using high-performance SpaCy."""
         # Process text through the optimized SpaCy pipeline
-        doc = CalculateFeatures.nlp(query_text)
+        doc = CalculateFeatures.get_nlp()(query_text)
         n_tokens = max(len(doc), 1)
 
         # SpaCy's built-in stopword detection
