@@ -95,7 +95,7 @@ Run the pipeline from the repository root in the following order.
 This step downloads BEIR datasets, runs dense and sparse retrieval, normalizes scores, computes IDF statistics, and writes cached artifacts for subsequent training and evaluation.
 
 ```bash
-python scipts/01_prepare_data.py
+python scripts/01_prepare_data.py
 ```
 
 Expected outputs:
@@ -108,7 +108,7 @@ Expected outputs:
 This step loads cached training data, builds training triplets, extracts the 17-dimensional query feature vectors, and trains both router architectures with the InfoNCE hybrid ranking loss.
 
 ```bash
-python scipts/02_train_models.py
+python scripts/02_train_models.py
 ```
 
 Expected outputs:
@@ -121,7 +121,7 @@ Expected outputs:
 This step loads the trained models and cached test data, runs zero-shot inference across BEIR datasets, compares dynamic routing against static dataset-level alpha sweeps, and generates interpretability plots.
 
 ```bash
-python scipts/03_evaluate.py
+python scripts/03_evaluate.py
 ```
 
 Expected outputs:
@@ -145,7 +145,7 @@ AdaptiveSparseDense/
 │   └── *.pth
 ├── notebooks/
 │   └── work_pipeline.ipynb
-├── scipts/
+├── scripts/
 │   ├── 01_prepare_data.py
 │   ├── 02_train_models.py
 │   └── 03_evaluate.py
@@ -209,4 +209,4 @@ This analysis is intended to quantify which lexical cues most strongly influence
 - Run all commands from the repository root.
 - Ensure the SpaCy English model `en_core_web_sm` is installed before importing `src/features.py`.
 - Data downloads and model downloads occur lazily during the first execution of the pipeline.
-- The executable script directory is currently named `scipts/` in the repository and the commands above reflect the repository as-is.
+- The executable script directory is currently named `scripts/` in the repository and the commands above reflect the repository as-is.
