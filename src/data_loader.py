@@ -18,7 +18,8 @@ class RunDatasets:
     @staticmethod
     def add_data(dataset_name: str):
         url = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{}.zip".format(dataset_name)
-        out_dir = os.path.join(os.getcwd(), "../datasets")
+        out_dir = os.path.join(os.getcwd(), "datasets")
+        print(f"Downloading {dataset_name} dataset...")
         data_path = util.download_and_unzip(url, out_dir)
         return data_path
 
