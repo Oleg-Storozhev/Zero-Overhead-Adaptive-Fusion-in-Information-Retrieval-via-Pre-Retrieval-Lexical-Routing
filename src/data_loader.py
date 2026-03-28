@@ -1,6 +1,5 @@
 import os
 import bm25s
-import numpy as np
 import random
 import math
 
@@ -13,7 +12,6 @@ from beir.retrieval.models import SentenceBERT
 
 class RunDatasets:
     def __init__(self):
-        self.evaluator = EvaluateRetrieval()
         self.train_retrieval_data = {}
         self.test_retrieval_data = {}
 
@@ -51,25 +49,6 @@ class RunDatasets:
                 else:
                     normalized[qid][did] = 0.5
         return normalized
-
-    @staticmethod
-    def get_hybrid_scores(dense_res, sparse_res, alpha):
-        """alpha * Dense + (1 - alpha) * Sparse."""
-        hybrid = {}
-        all_qids = set(dense_res.keys()) | set(sparse_res.keys())
-
-        for qid in all_qids:
-            hybrid[qid] = {}
-            q_dense = dense_res.get(qid, {})
-            q_sparse = sparse_res.get(qid, {})
-            all_dids = set(q_dense.keys()) | set(q_sparse.keys())
-
-            for did in all_dids:
-                s_d = q_dense.get(did, 0.0)
-                s_s = q_sparse.get(did, 0.0)
-                hybrid[qid][did] = float(alpha * s_d + (1.0 - alpha) * s_s)
-
-        return hybrid
 
     def _process_dataset(self, ds: str, split: str, sample_queries: int = None):
         """Core pipeline: loads data, runs retrieval, normalizes scores."""
@@ -133,56 +112,8 @@ class RunDatasets:
             self.train_retrieval_data[ds] = self._process_dataset(ds, split, sample_queries=sample_queries)
         print("\nTraining datasets processed and saved!")
 
-    def run_test_datasets_with_alphas(self, datasets: list):
-        alphas = np.round(np.arange(0.0, 1.05, 0.05), 2)
-        results_ndcg = {ds: [] for ds in datasets}
-        results_mrr = {ds: [] for ds in datasets}
-
-        for ds in datasets:
-            data = self.test_retrieval_data[ds]
-
-            dense_norm = data["dense_norm"]
-            sparse_norm = data["sparse_norm"]
-            qrels = data["qrels"]
-
-            print(f"[{ds.upper()}] Evaluating static alphas...")
-            for alpha in alphas:
-                hybrid_res = self.get_hybrid_scores(dense_norm, sparse_norm, alpha)
-
-                ndcg_dict, _, _, _ = self.evaluator.evaluate(qrels, hybrid_res, [10])
-                mrr_dict = self.evaluator.evaluate_custom(qrels, hybrid_res, [10], metric="mrr")
-
-                results_ndcg[ds].append(ndcg_dict["NDCG@10"])
-                mrr_key = list(mrr_dict.keys())[0]
-                results_mrr[ds].append(mrr_dict[mrr_key])
-
-        print("\nTest benchmark completed!")
-        return results_ndcg, results_mrr, alphas
-
     def run_test_datasets(self, datasets: list, split="test", sample_queries: int = 1000):
-        """Extracts artifacts, saves them for dynamic inference, and calculates static baselines."""
-        alphas = np.round(np.arange(0.0, 1.05, 0.05), 2)
-        results_ndcg = {ds: [] for ds in datasets}
-        results_mrr = {ds: [] for ds in datasets}
-
+        """Extracts and stores retrieval artifacts for downstream evaluation."""
         for ds in datasets:
-            data = self._process_dataset(ds, split, sample_queries=sample_queries)
-            self.test_retrieval_data[ds] = data  # Save for PyTorch
-
-            dense_norm = data["dense_norm"]
-            sparse_norm = data["sparse_norm"]
-            qrels = data["qrels"]
-
-            print(f"[{ds.upper()}] Evaluating static alphas...")
-            for alpha in alphas:
-                hybrid_res = self.get_hybrid_scores(dense_norm, sparse_norm, alpha)
-
-                ndcg_dict, _, _, _ = self.evaluator.evaluate(qrels, hybrid_res, [10])
-                mrr_dict = self.evaluator.evaluate_custom(qrels, hybrid_res, [10], metric="mrr")
-
-                results_ndcg[ds].append(ndcg_dict["NDCG@10"])
-                mrr_key = list(mrr_dict.keys())[0]
-                results_mrr[ds].append(mrr_dict[mrr_key])
-
-        print("\nTest benchmark completed!")
-        return results_ndcg, results_mrr, alphas
+            self.test_retrieval_data[ds] = self._process_dataset(ds, split, sample_queries=sample_queries)
+        print("\nTest datasets processed and cached!")

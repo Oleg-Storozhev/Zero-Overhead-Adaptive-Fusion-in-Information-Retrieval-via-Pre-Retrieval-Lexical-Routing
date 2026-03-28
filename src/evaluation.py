@@ -12,6 +12,10 @@ from src.features import CalculateFeatures
 from src.utils import ensure_dir, save_json
 
 
+ALPHAS = np.round(np.arange(0.0, 1.05, 0.05), 2)
+K_VALUES = [10, 100]
+
+
 class SHAPWrapper(nn.Module):
     """Wrapper to ensure the model outputs a 2D tensor for SHAP compatibility."""
     def __init__(self, original_model):
@@ -25,16 +29,54 @@ class SHAPWrapper(nn.Module):
         return out
 
 
+def build_hybrid_results(dense_scores: Dict[str, Dict[str, float]],
+                         sparse_scores: Dict[str, Dict[str, float]],
+                         alpha: float) -> Dict[str, Dict[str, float]]:
+    hybrid_results = {}
+    all_qids = set(dense_scores.keys()) | set(sparse_scores.keys())
+
+    for qid in all_qids:
+        hybrid_results[qid] = {}
+        dense_docs = dense_scores.get(qid, {})
+        sparse_docs = sparse_scores.get(qid, {})
+        candidate_docs = set(dense_docs.keys()) | set(sparse_docs.keys())
+
+        for did in candidate_docs:
+            s_d = dense_docs.get(did, 0.0)
+            s_s = sparse_docs.get(did, 0.0)
+            hybrid_results[qid][did] = float(alpha * s_d + (1.0 - alpha) * s_s)
+
+    return hybrid_results
+
+
+def serialize_metrics(metrics: Dict[str, float]) -> Dict[str, float]:
+    return {metric_name: float(metric_value) for metric_name, metric_value in metrics.items()}
+
+
+def collect_ranking_metrics(evaluator: EvaluateRetrieval,
+                            qrels: Dict[str, Dict[str, int]],
+                            results: Dict[str, Dict[str, float]],
+                            k_values: List[int]) -> Dict[str, Dict[str, float]]:
+    ndcg_dict, map_dict, recall_dict, precision_dict = evaluator.evaluate(qrels, results, k_values)
+    mrr_dict = evaluator.evaluate_custom(qrels, results, k_values, metric="mrr")
+
+    return {
+        "NDCG": serialize_metrics(ndcg_dict),
+        "MAP": serialize_metrics(map_dict),
+        "Recall": serialize_metrics(recall_dict),
+        "Precision": serialize_metrics(precision_dict),
+        "MRR": serialize_metrics(mrr_dict),
+    }
+
+
 def evaluate_static(retrieval_data: Dict[str, Any], datasets_list: List[str], output_dir: str = "results/plots"):
-    """Calculates static Oracle baselines by grid-searching alpha and plots/saves all metrics."""
+    """Calculates static Oracle baselines across alphas and saves full metrics."""
     evaluator = EvaluateRetrieval()
-    alphas = np.round(np.arange(0.0, 1.05, 0.05), 2)
-    k_values = [10, 100]
 
     results_ndcg_10 = {ds: [] for ds in datasets_list}
     results_mrr_10 = {ds: [] for ds in datasets_list}
 
-    detailed_metrics = {ds: [] for ds in datasets_list}
+    alpha_metrics = {ds: [] for ds in datasets_list}
 
     for ds in datasets_list:
         data = retrieval_data[ds]
@@ -43,33 +85,16 @@ def evaluate_static(retrieval_data: Dict[str, Any], datasets_list: List[str], ou
         qrels = data["qrels"]
 
         print(f"[{ds.upper()}] Evaluating static alphas...")
-        for alpha in alphas:
-            hybrid_results = {}
-            all_qids = set(dense_norm.keys()) | set(sparse_norm.keys())
+        for alpha in ALPHAS:
+            hybrid_results = build_hybrid_results(dense_norm, sparse_norm, float(alpha))
+            metrics = collect_ranking_metrics(evaluator, qrels, hybrid_results, K_VALUES)
 
-            for qid in all_qids:
-                hybrid_results[qid] = {}
-                candidate_docs = set(dense_norm.get(qid, {}).keys()) | set(sparse_norm.get(qid, {}).keys())
-                for did in candidate_docs:
-                    s_d = dense_norm.get(qid, {}).get(did, 0.0)
-                    s_s = sparse_norm.get(qid, {}).get(did, 0.0)
-                    hybrid_results[qid][did] = float(alpha * s_d + (1.0 - alpha) * s_s)
+            results_ndcg_10[ds].append(metrics["NDCG"]["NDCG@10"])
+            results_mrr_10[ds].append(metrics["MRR"]["MRR@10"])
 
-            ndcg_dict, map_dict, recall_dict, precision_dict = evaluator.evaluate(qrels, hybrid_results, k_values)
-            mrr_dict = evaluator.evaluate_custom(qrels, hybrid_results, k_values, metric="mrr")
-
-            # Сохраняем @10 для построения графиков
-            results_ndcg_10[ds].append(ndcg_dict["NDCG@10"])
-            results_mrr_10[ds].append(mrr_dict["MRR@10"])
-
-            # Сохраняем абсолютно все метрики для этой альфы
-            detailed_metrics[ds].append({
+            alpha_metrics[ds].append({
                 "alpha": float(alpha),
-                "NDCG": ndcg_dict,
-                "MAP": map_dict,
-                "Recall": recall_dict,
-                "Precision": precision_dict,
-                "MRR": mrr_dict
+                "metrics": metrics,
             })
 
     # Plotting
@@ -78,26 +103,26 @@ def evaluate_static(retrieval_data: Dict[str, Any], datasets_list: List[str], ou
 
     for i, ds in enumerate(datasets_list):
         # NDCG@10 Plot
-        ax1.plot(alphas, results_ndcg_10[ds], label=ds.upper(), color=colors[i], marker='o', markersize=4)
+        ax1.plot(ALPHAS, results_ndcg_10[ds], label=ds.upper(), color=colors[i], marker='o', markersize=4)
         max_idx = np.argmax(results_ndcg_10[ds])
-        ax1.scatter(alphas[max_idx], results_ndcg_10[ds][max_idx], color=colors[i], s=100, marker='*')
+        ax1.scatter(ALPHAS[max_idx], results_ndcg_10[ds][max_idx], color=colors[i], s=100, marker='*')
 
         # MRR@10 Plot
-        ax2.plot(alphas, results_mrr_10[ds], label=ds.upper(), color=colors[i], marker='o', markersize=4)
+        ax2.plot(ALPHAS, results_mrr_10[ds], label=ds.upper(), color=colors[i], marker='o', markersize=4)
         max_idx_mrr = np.argmax(results_mrr_10[ds])
-        ax2.scatter(alphas[max_idx_mrr], results_mrr_10[ds][max_idx_mrr], color=colors[i], s=100, marker='*')
+        ax2.scatter(ALPHAS[max_idx_mrr], results_mrr_10[ds][max_idx_mrr], color=colors[i], s=100, marker='*')
 
     ax1.set_title("NDCG@10 by Dense Weight ($\\alpha$)", fontsize=14)
     ax1.set_xlabel("$\\alpha$ (0 = Pure BM25, 1 = Pure Dense)", fontsize=12)
     ax1.set_ylabel("NDCG@10", fontsize=12)
-    ax1.set_xticks(alphas)
+    ax1.set_xticks(ALPHAS)
     ax1.grid(True, linestyle='--', alpha=0.6)
     ax1.legend()
 
     ax2.set_title("MRR@10 by Dense Weight ($\\alpha$)", fontsize=14)
     ax2.set_xlabel("$\\alpha$ (0 = Pure BM25, 1 = Pure Dense)", fontsize=12)
     ax2.set_ylabel("MRR@10", fontsize=12)
-    ax2.set_xticks(alphas)
+    ax2.set_xticks(ALPHAS)
     ax2.grid(True, linestyle='--', alpha=0.6)
     ax2.legend()
 
@@ -107,22 +132,38 @@ def evaluate_static(retrieval_data: Dict[str, Any], datasets_list: List[str], ou
     plt.savefig(save_path, dpi=300, format='pdf')
     print(f"\nSaved static evaluation plot to {save_path}")
 
-    # Формируем структуру данных для JSON
+    metric_selection = {
+        "ndcg_at_10": ("NDCG", "NDCG@10"),
+        "ndcg_at_100": ("NDCG", "NDCG@100"),
+        "map_at_10": ("MAP", "MAP@10"),
+        "map_at_100": ("MAP", "MAP@100"),
+        "recall_at_10": ("Recall", "Recall@10"),
+        "recall_at_100": ("Recall", "Recall@100"),
+        "precision_at_10": ("Precision", "P@10"),
+        "precision_at_100": ("Precision", "P@100"),
+        "mrr_at_10": ("MRR", "MRR@10"),
+        "mrr_at_100": ("MRR", "MRR@100"),
+    }
+
     best_by_dataset = {}
     for ds in datasets_list:
-        best_ndcg_idx = int(np.argmax(results_ndcg_10[ds]))
-        best_mrr_idx = int(np.argmax(results_mrr_10[ds]))
+        best_by_metric = {}
+        for metric_name, (family, key) in metric_selection.items():
+            best_idx = int(np.argmax([entry["metrics"][family][key] for entry in alpha_metrics[ds]]))
+            best_by_metric[metric_name] = {
+                "alpha": alpha_metrics[ds][best_idx]["alpha"],
+                "value": alpha_metrics[ds][best_idx]["metrics"][family][key],
+            }
 
         best_by_dataset[ds] = {
-            "best_alpha_ndcg": float(alphas[best_ndcg_idx]),
-            "best_ndcg_at_10": float(results_ndcg_10[ds][best_ndcg_idx]),
-            "best_alpha_mrr": float(alphas[best_mrr_idx]),
-            "best_mrr_at_10": float(results_mrr_10[ds][best_mrr_idx]),
-            "detailed_metrics": detailed_metrics[ds] # Все данные для всех альф
+            "best_by_metric": best_by_metric,
+            "alpha_metrics": alpha_metrics[ds],
         }
 
     return {
         "plot_path": str(save_path),
+        "k_values": K_VALUES,
+        "alpha_grid": [float(alpha) for alpha in ALPHAS],
         "best_by_dataset": best_by_dataset,
     }
 
@@ -133,7 +174,6 @@ def evaluate_dynamic_router(model, retrieval_data: Dict[str, Any], datasets: Lis
     model.eval()
     evaluator = EvaluateRetrieval()
     dynamic_results = {}
-    k_values = [10, 100]
 
     with torch.no_grad():
         for ds in datasets:
@@ -167,28 +207,35 @@ def evaluate_dynamic_router(model, retrieval_data: Dict[str, Any], datasets: Lis
                     s_s = sparse_norm.get(qid, {}).get(did, 0.0)
                     hybrid_results[qid][did] = alpha * s_d + (1.0 - alpha) * s_s
 
-            ndcg, map_metric, recall, precision = evaluator.evaluate(qrels, hybrid_results, k_values)
-            mrr = evaluator.evaluate_custom(qrels, hybrid_results, k_values, metric="mrr")
+            metrics = collect_ranking_metrics(evaluator, qrels, hybrid_results, K_VALUES)
 
             mean_alpha = np.mean(predicted_alphas)
             std_alpha = np.std(predicted_alphas)
 
             dynamic_results[ds] = {
-                "NDCG": ndcg,
-                "MAP": map_metric,
-                "Recall": recall,
-                "Precision": precision,
-                "MRR": mrr,
+                "metrics": metrics,
                 "mean_alpha": float(mean_alpha),
                 "std_alpha": float(std_alpha)
             }
 
-            print(f"NDCG@10:    {ndcg['NDCG@10']:.4f}  |  NDCG@100: {ndcg['NDCG@100']:.4f}")
-            print(f"MRR@10:     {mrr['MRR@10']:.4f}  |  MRR@100:  {mrr['MRR@100']:.4f}")
-            print(f"Recall@100: {recall['Recall@100']:.4f}")
+            print(
+                f"NDCG@10:    {metrics['NDCG']['NDCG@10']:.4f}  |  "
+                f"NDCG@100: {metrics['NDCG']['NDCG@100']:.4f}"
+            )
+            print(
+                f"MRR@10:     {metrics['MRR']['MRR@10']:.4f}  |  "
+                f"MRR@100:  {metrics['MRR']['MRR@100']:.4f}"
+            )
+            print(
+                f"Recall@10:  {metrics['Recall']['Recall@10']:.4f}  |  "
+                f"Recall@100: {metrics['Recall']['Recall@100']:.4f}"
+            )
             print(f"Alpha stats: mean = {mean_alpha:.4f}, std = {std_alpha:.4f}")
 
-    return dynamic_results
+    return {
+        "k_values": K_VALUES,
+        "datasets": dynamic_results,
+    }
 
 
 def get_plot_shap(model, retrieval_data: Dict[str, Any], datasets: List[str], output_dir: str = "results/plots"):
