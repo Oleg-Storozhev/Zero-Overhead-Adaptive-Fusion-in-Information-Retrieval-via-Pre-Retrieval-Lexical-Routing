@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 
 
-def infonce_hybrid_loss(alpha, s_d_pos, s_s_pos, s_d_negs, s_s_negs, tau=0.1):
+def infonce_hybrid_loss(alpha, s_d_pos, s_s_pos, s_d_negs, s_s_negs, tau=0.05):
     """
     Calculate the InfoNCE hybrid loss combining positive and negative similarity scores.
 

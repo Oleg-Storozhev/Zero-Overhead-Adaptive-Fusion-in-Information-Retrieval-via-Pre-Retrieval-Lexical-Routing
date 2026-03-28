@@ -84,7 +84,7 @@ def parse_args():
     parser.add_argument("--train-datasets", nargs="+", default=["scifact", "fiqa", "nfcorpus", "msmarco"])
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--batch-size", type=int, default=64)
-    parser.add_argument("--epochs", type=int, default=62)
+    parser.add_argument("--epochs", type=int, default=128)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--max-samples-per-dataset", type=int, default=15000)
     parser.add_argument("--num-negatives", type=int, default=5)

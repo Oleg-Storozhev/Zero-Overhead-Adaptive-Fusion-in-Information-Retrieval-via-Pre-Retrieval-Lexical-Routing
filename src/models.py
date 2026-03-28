@@ -37,10 +37,10 @@ class AlphaRouterMLP(nn.Module):
             nn.BatchNorm1d(input_dim),
             nn.Linear(input_dim, 32),
             nn.ReLU(),
-            nn.Dropout(0.3),
+            nn.Dropout(0.1),
             nn.Linear(32, 16),
             nn.ReLU(),
-            nn.Dropout(0.3),
+            nn.Dropout(0.1),
             nn.Linear(16, 1),
             nn.Sigmoid()
         )
@@ -62,7 +62,7 @@ class AlphaRouter(nn.Module):
 
         self.res_layer1 = nn.Linear(hidden_dim, hidden_dim)
         self.bn_res1 = nn.BatchNorm1d(hidden_dim)
-        self.dropout = nn.Dropout(0.3)
+        self.dropout = nn.Dropout(0.1)
 
         self.head = nn.Sequential(
             nn.Linear(hidden_dim, 16),
