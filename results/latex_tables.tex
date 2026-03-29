@@ -1,0 +1,60 @@
+\begin{table*}[t]
+\centering
+\caption{Comparison of NDCG@10 across 7 BEIR datasets. Best practical results are in \textbf{bold}; static oracle upper bounds are in \textit{italics}.}
+\label{tab:ndcg_10}
+\begin{tabular}{lccccccc}
+\toprule
+Model & FIQA & MSMARCO & NFCORPUS & NQ & QUORA & SCIDOCS & SCIFACT \\
+\midrule
+BM25 ($\alpha=0$) & 0.2384 & 0.4394 & 0.3053 & 0.2836 & 0.7508 & 0.1532 & 0.6625 \\
+Dense ($\alpha=1$) & 0.3687 & \textbf{0.6369} & 0.3159 & 0.4317 & \textbf{0.8780} & \textbf{0.2164} & 0.6451 \\
+\midrule
+AlphaRouter (Adv) & 0.3761 & 0.6198 & 0.3270 & 0.4299 & 0.8594 & 0.1901 & 0.7089 \\
+AlphaRouter (MLP) & \textbf{0.3816} & 0.6344 & \textbf{0.3317} & \textbf{0.4392} & 0.8599 & 0.1936 & \textbf{0.7122} \\
+\midrule
+Static Oracle & \textit{0.3993} & \textit{0.6441} & \textit{0.3486} & \textit{0.4470} & \textit{0.8860} & \textit{0.2201} & \textit{0.7125} \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{table*}[t]
+\centering
+\caption{Comparison of MRR@10 across 7 BEIR datasets. Best practical results are in \textbf{bold}; static oracle upper bounds are in \textit{italics}.}
+\label{tab:mrr_10}
+\begin{tabular}{lccccccc}
+\toprule
+Model & FIQA & MSMARCO & NFCORPUS & NQ & QUORA & SCIDOCS & SCIFACT \\
+\midrule
+BM25 ($\alpha=0$) & 0.2923 & 0.7460 & 0.5162 & 0.2486 & 0.7470 & 0.2762 & 0.6310 \\
+Dense ($\alpha=1$) & 0.4451 & \textbf{0.9128} & 0.5040 & 0.3845 & \textbf{0.8697} & \textbf{0.3594} & 0.6047 \\
+\midrule
+AlphaRouter (Adv) & 0.4537 & 0.8682 & 0.5298 & 0.3793 & 0.8518 & 0.3267 & 0.6732 \\
+AlphaRouter (MLP) & \textbf{0.4599} & 0.8798 & \textbf{0.5380} & \textbf{0.3916} & 0.8538 & 0.3293 & \textbf{0.6784} \\
+\midrule
+Static Oracle & \textit{0.4805} & \textit{0.9128} & \textit{0.5546} & \textit{0.3981} & \textit{0.8790} & \textit{0.3640} & \textit{0.6789} \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{table*}[t]
+\centering
+\caption{Comparison of Recall@100 across 7 BEIR datasets. Best practical results are in \textbf{bold}; static oracle upper bounds are in \textit{italics}.}
+\label{tab:recall_100}
+\begin{tabular}{lccccccc}
+\toprule
+Model & FIQA & MSMARCO & NFCORPUS & NQ & QUORA & SCIDOCS & SCIFACT \\
+\midrule
+BM25 ($\alpha=0$) & 0.5111 & 0.4133 & 0.2370 & 0.7177 & 0.9607 & 0.3515 & 0.8726 \\
+Dense ($\alpha=1$) & 0.7061 & 0.4668 & 0.3115 & 0.9035 & 0.9962 & \textbf{0.5101} & 0.9250 \\
+\midrule
+AlphaRouter (Adv) & 0.7181 & 0.4928 & 0.3070 & 0.9087 & 0.9975 & 0.4866 & \textbf{0.9517} \\
+AlphaRouter (MLP) & \textbf{0.7186} & \textbf{0.5034} & \textbf{0.3116} & \textbf{0.9117} & \textbf{0.9980} & 0.4973 & \textbf{0.9517} \\
+\midrule
+Static Oracle & \textit{0.7246} & \textit{0.5229} & \textit{0.3266} & \textit{0.9146} & \textit{0.9982} & \textit{0.5105} & \textit{0.9550} \\
+\bottomrule
+\end{tabular}
+\end{table*}
