@@ -199,7 +199,7 @@ AdaptiveSparseDense/
 
 ## Training Objective
 
-The training loss is implemented in [`src/loss.py`](/home/pelzigelwolf/PycharmProjects/AdaptiveSparseDense/src/loss.py). For each query, the router predicts `alpha`, which is used to interpolate dense and sparse scores:
+The training loss is implemented in [`src/loss.py`](src/loss.py). For each query, the router predicts `alpha`, which is used to interpolate dense and sparse scores:
 
 ```text
 hybrid_score = alpha * dense_score + (1 - alpha) * sparse_score
@@ -231,7 +231,7 @@ The default test suite evaluates the following BEIR datasets:
 
 ## SHAP Interpretability
 
-The repository includes a SHAP-based post hoc analysis pipeline in [`src/evaluation.py`](/home/pelzigelwolf/PycharmProjects/AdaptiveSparseDense/src/evaluation.py). After zero-shot evaluation, the code samples query feature vectors across datasets and computes feature attributions for the trained router.
+The repository includes a SHAP-based post hoc analysis pipeline in [`src/evaluation.py`](/src/evaluation.py). After zero-shot evaluation, the code samples query feature vectors across datasets and computes feature attributions for the trained router.
 
 This analysis is intended to quantify which lexical cues most strongly influence routing decisions, including IDF-driven specificity features, entropy, and lightweight POS-derived signals.
 

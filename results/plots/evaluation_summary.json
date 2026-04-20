@@ -382,8 +382,8 @@
     }
   },
   "shap_plots": {
-    "alpharouter_advanced": "/home/pelzigelwolf/PycharmProjects/AdaptiveSparseDense/results/plots/shap_summary_alpharouter.png",
-    "alpharouter_mlp": "/home/pelzigelwolf/PycharmProjects/AdaptiveSparseDense/results/plots/shap_summary_alpharoutermlp.png"
+    "alpharouter_advanced": "/results/plots/shap_summary_alpharouter.png",
+    "alpharouter_mlp": "/results/plots/shap_summary_alpharoutermlp.png"
   },
   "static_oracle": {
     "alpha_grid": [
@@ -4412,6 +4412,6 @@
       10,
       100
     ],
-    "plot_path": "/home/pelzigelwolf/PycharmProjects/AdaptiveSparseDense/results/plots/static_oracle_benchmark.pdf"
+    "plot_path": "/results/plots/static_oracle_benchmark.pdf"
   }
 }

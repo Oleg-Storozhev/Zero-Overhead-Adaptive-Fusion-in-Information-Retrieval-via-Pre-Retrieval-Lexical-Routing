@@ -1,6 +1,6 @@
 {
   "batch_size": 64,
-  "cache_path": "/home/pelzigelwolf/PycharmProjects/AdaptiveSparseDense/cached_data/train_retrieval_data_cached_v1.pkl",
+  "cache_path": "/cached_data/train_retrieval_data_cached_v1.pkl",
   "created_at_utc": "2026-03-28T17:44:07.756363+00:00",
   "device": "cuda",
   "epochs_requested": 128,
@@ -486,7 +486,7 @@
           "loss": 1.2111025013475336
         }
       ],
-      "weights_path": "/home/pelzigelwolf/PycharmProjects/AdaptiveSparseDense/models/alpharouter_advanced_v1.pth"
+      "weights_path": "/models/alpharouter_advanced_v1.pth"
     },
     "alpharouter_mlp": {
       "best_loss": 1.2427177848978939,
@@ -603,7 +603,7 @@
           "loss": 1.2435929957618062
         }
       ],
-      "weights_path": "/home/pelzigelwolf/PycharmProjects/AdaptiveSparseDense/models/alpharouter_mlp_v1.pth"
+      "weights_path": "/models/alpharouter_mlp_v1.pth"
     }
   },
   "num_negatives": 5,
