@@ -58,3 +58,24 @@ Static Oracle & \textit{0.7246} & \textit{0.5229} & \textit{0.3266} & \textit{0.
 \bottomrule
 \end{tabular}
 \end{table*}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{table}[h]
+\centering
+\caption{Mean and standard deviation of predicted fusion weights ($\alpha$) across datasets, demonstrating the reduced variance and domain-aware behavior of the MLP router compared to the Advanced model.}
+\label{tab:alpha_stats}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Dataset} & \textbf{Mean $\alpha$ (MLP)} & \textbf{Std $\alpha$ (MLP)} & \textbf{Mean $\alpha$ (Adv)} & \textbf{Std $\alpha$ (Adv)} \\
+\midrule
+FIQA & 0.579 & 0.093 & 0.580 & 0.188 \\
+MSMARCO & 0.684 & 0.064 & 0.724 & 0.170 \\
+NFCorpus & 0.218 & 0.139 & 0.219 & 0.213 \\
+NQ & 0.664 & 0.042 & 0.670 & 0.134 \\
+Quora & 0.627 & 0.055 & 0.632 & 0.220 \\
+SCIDOCS & 0.469 & 0.167 & 0.442 & 0.262 \\
+SciFact & 0.572 & 0.097 & 0.586 & 0.182 \\
+\bottomrule
+\end{tabular}
+\end{table}
