@@ -196,7 +196,7 @@ def build_table(data: Dict, datasets: List[str], metric_key: str, caption_templa
         r"\toprule",
         "Model & " + " & ".join(dataset_headers) + r" \\",
         r"\midrule",
-    ]
+        ]
 
     for row_index, (row_id, row_label) in enumerate(DEFAULT_MODELS):
         latex_lines.append(f"{row_label} & " + " & ".join(rows[row_id]) + r" \\")
@@ -207,6 +207,53 @@ def build_table(data: Dict, datasets: List[str], metric_key: str, caption_templa
         r"\bottomrule",
         r"\end{tabular}",
         r"\end{table*}",
+    ])
+
+    return "\n".join(latex_lines)
+
+
+def build_alpha_stats_table(data: Dict, datasets: List[str]) -> str:
+    """Generates the Appendix table for Mean and Std of Alpha."""
+    caption = r"Mean and standard deviation of predicted fusion weights ($\alpha$) across datasets, demonstrating the reduced variance and domain-aware behavior of the MLP router compared to the Advanced model."
+    label = "tab:alpha_stats"
+
+    latex_lines = [
+        r"\begin{table}[h]",
+        r"\centering",
+        rf"\caption{{{caption}}}",
+        rf"\label{{{label}}}",
+        r"\begin{tabular}{lcccc}",
+        r"\toprule",
+        r"\textbf{Dataset} & \textbf{Mean $\alpha$ (MLP)} & \textbf{Std $\alpha$ (MLP)} & \textbf{Mean $\alpha$ (Adv)} & \textbf{Std $\alpha$ (Adv)} \\",
+        r"\midrule",
+    ]
+
+    for dataset in datasets:
+        mlp_data = require_mapping(
+            data["dynamic_routers"]["alpharouter_mlp"]["datasets"], dataset, "alpharouter_mlp.datasets"
+        )
+        adv_data = require_mapping(
+            data["dynamic_routers"]["alpharouter_advanced"]["datasets"], dataset, "alpharouter_advanced.datasets"
+        )
+
+        mean_mlp = float(require_mapping(mlp_data, "mean_alpha", f"{dataset}.mlp"))
+        std_mlp = float(require_mapping(mlp_data, "std_alpha", f"{dataset}.mlp"))
+        mean_adv = float(require_mapping(adv_data, "mean_alpha", f"{dataset}.adv"))
+        std_adv = float(require_mapping(adv_data, "std_alpha", f"{dataset}.adv"))
+
+        # Pretty formatting for dataset names
+        dataset_name = dataset.upper()
+        if dataset_name == "SCIFACT": dataset_name = "SciFact"
+        elif dataset_name == "NFCORPUS": dataset_name = "NFCorpus"
+        elif dataset_name == "QUORA": dataset_name = "Quora"
+
+        row = rf"{dataset_name} & {mean_mlp:.3f} & {std_mlp:.3f} & {mean_adv:.3f} & {std_adv:.3f} \\"
+        latex_lines.append(row)
+
+    latex_lines.extend([
+        r"\bottomrule",
+        r"\end{tabular}",
+        r"\end{table}",
     ])
 
     return "\n".join(latex_lines)
@@ -228,6 +275,8 @@ def main():
     datasets = resolve_dataset_order(data, args.datasets)
 
     tables = []
+
+    # 1. Generate metric tables (NDCG, MRR, Recall, etc.)
     for metric_key in args.metrics:
         table = build_table(
             data=data,
@@ -238,6 +287,12 @@ def main():
         tables.append(table)
         print(f"Generated table for {metric_key}")
 
+    # 2. Generate the new Alpha stats table for the Appendix
+    alpha_stats_table = build_alpha_stats_table(data, datasets)
+    tables.append(alpha_stats_table)
+    print(f"Generated table for Alpha Statistics (Appendix)")
+
+    # 3. Write all to file
     write_tables(output_path, tables)
     print(f"Saved {len(tables)} table(s) to {output_path}")
 
